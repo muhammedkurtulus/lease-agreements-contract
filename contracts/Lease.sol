@@ -34,14 +34,30 @@ contract LeaseContract {
 
     event LeaseStarted(
         address indexed tenantAddress,
+        address indexed ownerAddress,
+        string propertyAddress,
         uint256 startDate,
         uint256 endDate,
         PropertyType propertyType,
+        string ownerName,
         string tenantName
     );
-
-    event LeaseEnded(address indexed tenantAddress, PropertyType propertyType);
-    event IssueReported(address indexed tenantAddress, string issueDescription);
+    event LeaseEnded(
+        address indexed tenantAddress,
+        address indexed ownerAddress,
+        string propertyAddress,
+        uint256 startDate,
+        uint256 endDate,
+        PropertyType propertyType,
+        string ownerName,
+        string tenantName
+    );
+    event IssueReported(
+        address indexed tenantAddress,
+        string propertyAddress,
+        string tenantName,
+        string issueDescription
+    );
 
     function addProperty(
         string memory propertyAddress,
@@ -78,9 +94,12 @@ contract LeaseContract {
 
         emit LeaseStarted(
             tenantAddress,
+            msg.sender,
+            propertyAddress,
             startDate,
             endDate,
             property.propertyType,
+            property.ownerName,
             tenantName
         );
     }
@@ -95,16 +114,30 @@ contract LeaseContract {
         lease.startDate = 0;
         lease.endDate = 0;
 
-        emit LeaseEnded(lease.tenantAddress, property.propertyType);
+        emit LeaseEnded(
+            lease.tenantAddress,
+            msg.sender,
+            propertyAddress,
+            lease.startDate,
+            lease.endDate,
+            property.propertyType,
+            property.ownerName,
+            lease.tenantName
+        );
     }
 
     function reportIssue(
         string memory propertyAddress,
         string memory issueDescription
     ) public {
-        PropertyInfo storage property = properties[propertyAddress];
+        PropertyInfo memory property = properties[propertyAddress];
 
-        emit IssueReported(property.leaseInfo.tenantAddress, issueDescription);
+        emit IssueReported(
+            property.leaseInfo.tenantAddress,
+            propertyAddress,
+            property.leaseInfo.tenantName,
+            issueDescription
+        );
     }
 
     function getOwnerProperties() public view returns (PropertyInfo[] memory) {
