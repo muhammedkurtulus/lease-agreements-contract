@@ -63,7 +63,7 @@ contract LeaseContract {
         string memory propertyAddress,
         PropertyType propertyType,
         string memory ownerName
-    ) public {
+    ) external {
         require(
             propertyType == PropertyType.House ||
                 propertyType == PropertyType.Shop,
@@ -82,9 +82,13 @@ contract LeaseContract {
         string memory propertyAddress,
         address tenantAddress,
         string memory tenantName,
-        uint256 startDate,
-        uint256 endDate
-    ) public onlyPropertyOwner(propertyAddress) {
+        uint256 durationDays
+    ) external onlyPropertyOwner(propertyAddress) {
+        require(durationDays > 0, "Invalid lease duration");
+
+        uint256 startDate = block.timestamp;
+        uint256 endDate = startDate + (durationDays * 1 days);
+
         PropertyInfo storage property = properties[propertyAddress];
         LeaseInfo storage lease = property.leaseInfo;
         lease.tenantAddress = tenantAddress;
@@ -106,7 +110,7 @@ contract LeaseContract {
 
     function endLease(
         string memory propertyAddress
-    ) public onlyPropertyOwner(propertyAddress) {
+    ) external onlyPropertyOwner(propertyAddress) {
         PropertyInfo storage property = properties[propertyAddress];
         LeaseInfo storage lease = property.leaseInfo;
         lease.tenantAddress = address(0);
@@ -129,8 +133,8 @@ contract LeaseContract {
     function reportIssue(
         string memory propertyAddress,
         string memory issueDescription
-    ) public {
-        PropertyInfo memory property = properties[propertyAddress];
+    ) external {
+        PropertyInfo memory property = getPropertyInfo(propertyAddress);
 
         emit IssueReported(
             property.leaseInfo.tenantAddress,
@@ -140,7 +144,11 @@ contract LeaseContract {
         );
     }
 
-    function getOwnerProperties() public view returns (PropertyInfo[] memory) {
+    function getOwnerProperties()
+        external
+        view
+        returns (PropertyInfo[] memory)
+    {
         return ownerProperties[msg.sender];
     }
 

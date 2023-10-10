@@ -42,24 +42,30 @@ describe("LeaseContract", function () {
     const propertyType = PropertyType.House;
     const ownerName = "Ali";
     const tenantName = "Veli";
-    const startDate = Math.floor(Date.now() / 1000);
-    const endDate = startDate + 86400;
+    const durationDays = 30;
 
     await leaseContract.addProperty(propertyAddress, propertyType, ownerName);
+
+    const startDate = (await ethers.provider.getBlock("latest"))?.timestamp;
+    const endDate = startDate! + durationDays * 86400;
 
     await leaseContract.startLease(
       propertyAddress,
       tenant.address,
       tenantName,
-      startDate,
-      endDate
+      durationDays
     );
 
     const addedProperty = await leaseContract.getPropertyInfo(propertyAddress);
+    
     expect(addedProperty.leaseInfo.tenantAddress).to.equal(tenant.address);
     expect(addedProperty.leaseInfo.tenantName).to.equal(tenantName);
-    expect(addedProperty.leaseInfo.startDate).to.equal(startDate);
-    expect(addedProperty.leaseInfo.endDate).to.equal(endDate);
+
+    expect(addedProperty.leaseInfo.startDate).to.greaterThanOrEqual(startDate!);
+    expect(addedProperty.leaseInfo.startDate).to.lessThanOrEqual(startDate!+2); // 2 seconds tolerance
+
+    expect(addedProperty.leaseInfo.endDate).to.greaterThanOrEqual(endDate!);
+    expect(addedProperty.leaseInfo.endDate).to.lessThanOrEqual(endDate!+2); // 2 seconds tolerance
   });
 
   it("should end lease", async function () {
@@ -70,8 +76,7 @@ describe("LeaseContract", function () {
     const propertyType = PropertyType.House;
     const ownerName = "Ali";
     const tenantName = "Veli";
-    const startDate = Math.floor(Date.now() / 1000);
-    const endDate = startDate + 86400;
+    const durationDays = 30;
 
     await leaseContract.addProperty(propertyAddress, propertyType, ownerName);
 
@@ -79,8 +84,7 @@ describe("LeaseContract", function () {
       propertyAddress,
       tenant.address,
       tenantName,
-      startDate,
-      endDate
+      durationDays
     );
 
     await leaseContract.endLease(propertyAddress);
