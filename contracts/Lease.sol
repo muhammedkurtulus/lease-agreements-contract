@@ -1,65 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-contract LeaseContract {
-    enum PropertyType {
-        House,
-        Shop
-    }
+import "./Manager.sol";
+import "./Events.sol";
+import "./Types.sol";
 
-    enum ConfirmationType {
-        none,
-        confirm,
-        reject
-    }
-
-    struct Complaint {
-        address complainant;
-        address whoAbout;
-        uint256 propertyIndex;
-        string description;
-        ConfirmationType confirmed;
-    }
-
-    struct PropertyInfo {
-        string propertyAddress;
-        address owner;
-        PropertyType propertyType;
-        string ownerName;
-        LeaseInfo leaseInfo;
-        bool isListed;
-    }
-
-    struct LeaseInfo {
-        address tenantAddress;
-        string tenantName;
-        uint256 startDate;
-        uint256 endDate;
-        bool isActive;
-        uint256 duration;
-        address terminationRequester;
-        string terminationReason;
-        uint256 terminationRequestTime;
-    }
-
+contract Lease is Manager, Events {
     uint256 public propertiesLength;
 
     mapping(uint256 => PropertyInfo) public properties;
     mapping(address => Complaint) public complaints;
 
-    address public owner;
-    address[] public managers;
-
     constructor() {
         propertiesLength = 0;
-        owner = msg.sender;
-        managers.push(msg.sender);
     }
 
     function addProperty(
-        string memory propertyAddress,
+        string calldata propertyAddress,
         PropertyType propertyType,
-        string memory ownerName
+        string calldata ownerName
     ) external {
         require(
             propertyType == PropertyType.House ||
@@ -85,12 +44,24 @@ contract LeaseContract {
         propertiesLength++;
     }
 
+    function getAllProperties() external view returns (PropertyInfo[] memory) {
+        PropertyInfo[] memory _properties = new PropertyInfo[](
+            propertiesLength
+        );
+
+        for (uint256 i = 0; i < propertiesLength; i++) {
+            _properties[i] = properties[i];
+        }
+
+        return _properties;
+    }
+
     function unlistProperty(
         uint256 propertyIndex
     ) external onlyPropertyOwner(propertyIndex) {
         require(
             properties[propertyIndex].leaseInfo.tenantAddress == address(0),
-            "Property cannot be removed while leased"
+            "Property cannot be unlist while leased"
         );
 
         PropertyInfo storage property = properties[propertyIndex];
@@ -105,7 +76,7 @@ contract LeaseContract {
     function startLease(
         uint256 propertyIndex,
         address tenantAddress,
-        string memory tenantName,
+        string calldata tenantName,
         uint256 duration
     ) external onlyPropertyOwner(propertyIndex) {
         require(duration > 0, "Lease duration must be at least 1 year");
@@ -168,48 +139,21 @@ contract LeaseContract {
         );
     }
 
-    function terminateLease(
-        uint256 propertyIndex,
-        string memory reason
-    ) external onlyTenant(propertyIndex) {
-        PropertyInfo storage property = properties[propertyIndex];
-
-        require(property.leaseInfo.isActive, "Lease is not active");
-
-        emit LeaseEnded(
-            property.leaseInfo.tenantAddress,
-            msg.sender,
-            propertyIndex,
-            property.leaseInfo.startDate,
-            block.timestamp,
-            property.propertyType,
-            property.propertyAddress,
-            property.ownerName,
-            property.leaseInfo.tenantName,
-            reason
-        );
-
-        property.leaseInfo.tenantAddress = address(0);
-        property.leaseInfo.tenantName = "";
-        property.leaseInfo.startDate = 0;
-        property.leaseInfo.endDate = 0;
-        property.leaseInfo.isActive = false;
-    }
-
     function requestTermination(
         uint256 propertyIndex,
-        string memory reason
+        string calldata reason
     ) external {
         PropertyInfo storage property = properties[propertyIndex];
 
         require(
-            property.leaseInfo.isActive,
-            "Termination request can only be made for an active lease"
-        );
-        require(
             property.leaseInfo.tenantAddress == msg.sender ||
                 property.owner == msg.sender,
             "Only tenant or owner can request termination"
+        );
+
+        require(
+            property.leaseInfo.isActive,
+            "Termination request can only be made for an active lease"
         );
 
         property.leaseInfo.terminationRequester = msg.sender;
@@ -288,7 +232,7 @@ contract LeaseContract {
     function submitComplaint(
         uint256 propertyIndex,
         address whoAbout,
-        string memory description
+        string calldata description
     ) external {
         require(propertyIndex < propertiesLength, "Invalid property index");
 
@@ -339,57 +283,7 @@ contract LeaseContract {
             : ConfirmationType.reject;
     }
 
-    function setManager(address managerAddress) external onlyOwner {
-        // Sözleşme sahibi (owner), yeni bir yönetici ekleyebilir
-        require(managerAddress != address(0), "Invalid manager address");
-        require(!isManager(managerAddress), "Address is already a manager");
-        managers.push(managerAddress);
-    }
-
-    function removeManager(address managerAddress) external onlyOwner {
-        // Sözleşme sahibi (owner), bir yöneticiyi kaldırabilir
-        require(managerAddress != address(0), "Invalid manager address");
-        require(isManager(managerAddress), "Address is not a manager");
-        require(managers.length > 1, "At least one manager must remain");
-
-        for (uint256 i = 0; i < managers.length; i++) {
-            if (managers[i] == managerAddress) {
-                managers[i] = managers[managers.length - 1];
-                managers.pop();
-                break;
-            }
-        }
-    }
-
-    function isManager(address managerAddress) public view returns (bool) {
-        for (uint256 i = 0; i < managers.length; i++) {
-            if (managers[i] == managerAddress) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function getAllProperties() public view returns (PropertyInfo[] memory) {
-        PropertyInfo[] memory _properties = new PropertyInfo[](
-            propertiesLength
-        );
-
-        for (uint256 i = 0; i < propertiesLength; i++) {
-            _properties[i] = properties[i];
-        }
-
-        return _properties;
-    }
-
-    modifier onlyOwner() {
-        require(
-            msg.sender == owner,
-            "Only contract owner can perform this action"
-        );
-        _;
-    }
-
+    //MODIFIERS
     modifier onlyPropertyOwner(uint256 propertyIndex) {
         require(
             properties[propertyIndex].owner == msg.sender,
@@ -406,59 +300,8 @@ contract LeaseContract {
         _;
     }
 
-    modifier notTerminationRequester(uint256 propertyIndex) {
-        require(
-            properties[propertyIndex].leaseInfo.terminationRequester !=
-                msg.sender,
-            "Termination requester cannot perform this action"
-        );
-        _;
-    }
-
     modifier onlyManager() {
         require(isManager(msg.sender), "Only managers can perform this action");
         _;
     }
-
-    event LeaseStarted(
-        address indexed tenantAddress,
-        address indexed ownerAddress,
-        uint256 propertyIndex,
-        uint256 startDate,
-        uint256 endDate,
-        PropertyType propertyType,
-        string propertyAddress,
-        string ownerName,
-        string tenantName
-    );
-    event LeaseEnded(
-        address indexed tenantAddress,
-        address indexed ownerAddress,
-        uint256 propertyIndex,
-        uint256 startDate,
-        uint256 endDate,
-        PropertyType propertyType,
-        string propertyAddress,
-        string ownerName,
-        string tenantName,
-        string terminationReason
-    );
-    event ComplaintReported(
-        address indexed complainant,
-        address indexed whoAbout,
-        uint256 propertyIndex,
-        string propertyAddress,
-        string description,
-        address tenantAddress,
-        address propertyOwner
-    );
-
-    event TerminationRequested(
-        address indexed requesterAddress,
-        uint256 propertyIndex,
-        string propertyAddress,
-        string ownerName,
-        string tenantName,
-        string reason
-    );
 }
