@@ -21,6 +21,7 @@ struct Complaint {
 }
 
 struct PropertyInfo {
+    uint256 propertyIndex;
     string propertyAddress;
     address owner;
     PropertyType propertyType;

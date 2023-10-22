@@ -34,6 +34,7 @@ contract Lease is Manager, Events {
         );
 
         PropertyInfo storage property = properties[propertiesLength];
+        property.propertyIndex = propertiesLength;
         property.isListed = true;
         property.owner = msg.sender;
         property.propertyType = propertyType;
@@ -271,12 +272,20 @@ contract Lease is Manager, Events {
 
     function reviewComplaint(
         uint256 propertyIndex,
-        address complainant,
+        address whoAbout,
         bool confirmation
     ) external onlyManager {
         require(propertyIndex < propertiesLength, "Invalid property index");
 
-        Complaint storage complaint = complaints[complainant];
+        PropertyInfo memory property = properties[propertyIndex];
+
+        require(
+            property.owner != msg.sender &&
+                property.leaseInfo.tenantAddress != msg.sender,
+            "Manager who is tenant or owner cannot review complaints"
+        );
+
+        Complaint storage complaint = complaints[whoAbout];
 
         complaint.confirmed = confirmation
             ? ConfirmationType.confirm
