@@ -82,9 +82,9 @@ describe("LeaseContract", function () {
       .connect(addr1)
       .requestTermination(0, ownerTerminateReason);
 
-    await expect(leaseContract.confirmTermination(0)).to.be.revertedWith(
-      "15 days have not passed yet"
-    );
+    await expect(
+      leaseContract.confirmTermination(0)
+    ).to.be.revertedWithCustomError(leaseContract, "NotPassed15Days");
 
     // const property = await leaseContract.properties(0);
 

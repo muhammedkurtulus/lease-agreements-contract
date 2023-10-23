@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
+import "./utils/Errors.sol";
+
 contract Manager {
     address[] public managers;
     address public owner;
@@ -11,23 +13,27 @@ contract Manager {
     }
 
     modifier onlyOwner() {
-        require(
-            msg.sender == owner,
-            "Only contract owner can perform this action"
-        );
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
-    function setManager(address managerAddress) external onlyOwner {
-        require(managerAddress != address(0), "Invalid manager address");
-        require(!isManager(managerAddress), "Address is already a manager");
+    modifier validAddress(address _address) {
+        ErrorHelper.checkAddress(_address);
+        _;
+    }
+
+    function setManager(
+        address managerAddress
+    ) external onlyOwner validAddress(managerAddress) {
+        if (isManager(managerAddress)) revert AlreadyAdded();
         managers.push(managerAddress);
     }
 
-    function removeManager(address managerAddress) external onlyOwner {
-        require(managerAddress != address(0), "Invalid manager address");
-        require(isManager(managerAddress), "Address is not a manager");
-        require(managers.length > 1, "At least one manager must remain");
+    function removeManager(
+        address managerAddress
+    ) external onlyOwner validAddress(managerAddress) {
+        if (!isManager(managerAddress)) revert IsNotManager();
+        if (managers.length == 1) revert MustRemainOneManager();
 
         for (uint256 i = 0; i < managers.length; i++) {
             if (managers[i] == managerAddress) {
@@ -38,7 +44,9 @@ contract Manager {
         }
     }
 
-    function isManager(address managerAddress) public view returns (bool) {
+    function isManager(
+        address managerAddress
+    ) public view validAddress(managerAddress) returns (bool) {
         for (uint256 i = 0; i < managers.length; i++) {
             if (managers[i] == managerAddress) {
                 return true;

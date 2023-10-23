@@ -2,8 +2,9 @@
 pragma solidity ^0.8.9;
 
 import "./Manager.sol";
-import "./Events.sol";
-import "./Types.sol";
+import "./utils/Events.sol";
+import "./utils/Types.sol";
+import "./utils/Errors.sol";
 
 contract Lease is Manager, Events {
     uint256 public propertiesLength;
@@ -20,18 +21,17 @@ contract Lease is Manager, Events {
         PropertyType propertyType,
         string calldata ownerName
     ) external {
-        require(
-            propertyType == PropertyType.House ||
-                propertyType == PropertyType.Shop,
-            "Invalid property type"
-        );
+        if (
+            propertyType != PropertyType.House &&
+            propertyType != PropertyType.Shop
+        ) revert InvalidType();
+        ErrorHelper.checkEmpty(ownerName);
+        ErrorHelper.checkEmpty(propertyAddress);
 
         Complaint memory complaint = complaints[msg.sender];
 
-        require(
-            complaint.confirmed != ConfirmationType.reject,
-            "You are banned from adding new properties"
-        );
+        if (complaint.confirmed == ConfirmationType.confirm)
+            revert BannedFromThisAction();
 
         PropertyInfo storage property = properties[propertiesLength];
         property.propertyIndex = propertiesLength;
@@ -59,11 +59,12 @@ contract Lease is Manager, Events {
 
     function unlistProperty(
         uint256 propertyIndex
-    ) external onlyPropertyOwner(propertyIndex) {
-        require(
-            properties[propertyIndex].leaseInfo.tenantAddress == address(0),
-            "Property cannot be unlist while leased"
-        );
+    ) external validIndex(propertyIndex) onlyPropertyOwner(propertyIndex) {
+        if (properties[propertyIndex].isListed == false)
+            revert AlreadyUnlisted();
+
+        if (properties[propertyIndex].leaseInfo.isActive)
+            revert CannotUnlistActiveLease();
 
         PropertyInfo storage property = properties[propertyIndex];
         property.isListed = false;
@@ -79,23 +80,22 @@ contract Lease is Manager, Events {
         address tenantAddress,
         string calldata tenantName,
         uint256 duration
-    ) external onlyPropertyOwner(propertyIndex) {
-        require(duration > 0, "Lease duration must be at least 1 year");
-        require(tenantAddress != msg.sender, "Owner cannot be tenant");
+    ) external validIndex(propertyIndex) onlyPropertyOwner(propertyIndex) {
+        ErrorHelper.checkZero(duration);
+        ErrorHelper.checkEmpty(tenantName);
+        ErrorHelper.checkAddress(tenantAddress);
+
+        if (tenantAddress == msg.sender) revert OwnerCannotBeTenant();
 
         Complaint memory complaint = complaints[msg.sender];
 
-        require(
-            complaint.confirmed != ConfirmationType.reject,
-            "You are banned from starting new leases"
-        );
+        if (complaint.confirmed == ConfirmationType.confirm)
+            revert BannedFromThisAction();
 
         PropertyInfo storage property = properties[propertyIndex];
 
-        require(
-            property.leaseInfo.tenantAddress == address(0),
-            "Lease is already started"
-        );
+        if (properties[propertyIndex].leaseInfo.tenantAddress != address(0))
+            revert AlreadyAdded();
 
         property.leaseInfo.tenantAddress = tenantAddress;
         property.leaseInfo.tenantName = tenantName;
@@ -106,20 +106,15 @@ contract Lease is Manager, Events {
 
     function signLease(
         uint256 propertyIndex
-    ) external onlyTenant(propertyIndex) {
+    ) external validIndex(propertyIndex) onlyTenant(propertyIndex) {
         PropertyInfo storage property = properties[propertyIndex];
 
-        require(
-            property.leaseInfo.tenantAddress == msg.sender,
-            "Only tenant can sign the lease"
-        );
+        if (property.leaseInfo.tenantAddress != msg.sender) revert OnlyTenant();
 
-        require(!property.leaseInfo.isActive, "Lease is already signed");
+        if (property.leaseInfo.isActive) revert AlreadyActive();
 
-        require(
-            block.timestamp <= property.leaseInfo.endDate,
-            "Lease signing period has expired"
-        );
+        if (block.timestamp > property.leaseInfo.endDate)
+            revert SignPeriodExpired();
 
         property.leaseInfo.startDate = block.timestamp;
         property.leaseInfo.endDate =
@@ -143,19 +138,15 @@ contract Lease is Manager, Events {
     function requestTermination(
         uint256 propertyIndex,
         string calldata reason
-    ) external {
+    ) external validIndex(propertyIndex) {
         PropertyInfo storage property = properties[propertyIndex];
 
-        require(
-            property.leaseInfo.tenantAddress == msg.sender ||
-                property.owner == msg.sender,
-            "Only tenant or owner can request termination"
-        );
+        if (
+            property.leaseInfo.tenantAddress != msg.sender &&
+            property.owner != msg.sender
+        ) revert OnlyTenantOrPropertyOwner();
 
-        require(
-            property.leaseInfo.isActive,
-            "Termination request can only be made for an active lease"
-        );
+        if (!property.leaseInfo.isActive) revert OnlyActiveLease();
 
         property.leaseInfo.terminationRequester = msg.sender;
         property.leaseInfo.terminationReason = reason;
@@ -171,41 +162,39 @@ contract Lease is Manager, Events {
         );
     }
 
-    function confirmTermination(uint256 propertyIndex) external {
+    function confirmTermination(
+        uint256 propertyIndex
+    ) external validIndex(propertyIndex) {
         PropertyInfo storage property = properties[propertyIndex];
 
-        require(
-            property.leaseInfo.terminationRequester != address(0),
-            "Termination is not requested"
-        );
+        if (property.leaseInfo.terminationRequester == address(0))
+            revert RequestNotExist();
 
         if (msg.sender == property.owner) {
             Complaint memory complaint = complaints[
                 property.leaseInfo.tenantAddress
             ];
-            require(
-                property.leaseInfo.terminationRequester != msg.sender ||
-                    complaint.confirmed == ConfirmationType.confirm,
-                "Termination requester cannot confirm termination"
-            );
+
+            if (
+                property.leaseInfo.terminationRequester == msg.sender &&
+                complaint.confirmed != ConfirmationType.confirm
+            ) revert RequesterCannotConfirm();
         } else if (msg.sender == property.leaseInfo.tenantAddress) {
             Complaint memory complaint = complaints[property.owner];
 
-            require(
-                property.leaseInfo.terminationRequester != msg.sender ||
-                    block.timestamp >=
-                    property.leaseInfo.terminationRequestTime + 15 days ||
-                    complaint.confirmed == ConfirmationType.confirm,
-                "15 days have not passed yet"
-            );
+            if (
+                property.leaseInfo.terminationRequester == msg.sender &&
+                block.timestamp <
+                property.leaseInfo.terminationRequestTime + 15 days &&
+                complaint.confirmed != ConfirmationType.confirm
+            ) revert NotPassed15Days();
         } else if (isManager(msg.sender)) {
-            require(
-                block.timestamp >=
-                    property.leaseInfo.terminationRequestTime + 15 days,
-                "15 days have not passed yet"
-            );
+            if (
+                block.timestamp <
+                property.leaseInfo.terminationRequestTime + 15 days
+            ) revert NotPassed15Days();
         } else {
-            require(false, "Permission denied");
+            revert PermissionDenied();
         }
 
         emit LeaseEnded(
@@ -234,23 +223,18 @@ contract Lease is Manager, Events {
         uint256 propertyIndex,
         address whoAbout,
         string calldata description
-    ) external {
-        require(propertyIndex < propertiesLength, "Invalid property index");
+    ) external validIndex(propertyIndex) {
+        ErrorHelper.checkAddress(whoAbout);
+        if (whoAbout == msg.sender) revert CannotComplainOwnself();
 
         PropertyInfo memory property = properties[propertyIndex];
 
-        require(
-            property.leaseInfo.tenantAddress == msg.sender ||
-                property.owner == msg.sender,
-            "Only tenant or owner can request termination"
-        );
-        require(
-            (whoAbout == property.owner ||
-                whoAbout == property.leaseInfo.tenantAddress) &&
-                whoAbout != address(0),
-            "Invalid address"
-        );
-        require(whoAbout != msg.sender, "You cannot complain about yourself");
+        if (
+            properties[propertyIndex].owner != msg.sender &&
+            properties[propertyIndex].leaseInfo.tenantAddress != msg.sender &&
+            (whoAbout != property.owner &&
+                whoAbout != property.leaseInfo.tenantAddress)
+        ) revert OnlyTenantOrPropertyOwner();
 
         Complaint storage complaint = complaints[whoAbout];
 
@@ -274,16 +258,13 @@ contract Lease is Manager, Events {
         uint256 propertyIndex,
         address whoAbout,
         bool confirmation
-    ) external onlyManager {
-        require(propertyIndex < propertiesLength, "Invalid property index");
-
+    ) external validIndex(propertyIndex) onlyManager {
         PropertyInfo memory property = properties[propertyIndex];
 
-        require(
-            property.owner != msg.sender &&
-                property.leaseInfo.tenantAddress != msg.sender,
-            "Manager who is tenant or owner cannot review complaints"
-        );
+        if (
+            property.owner == msg.sender ||
+            property.leaseInfo.tenantAddress == msg.sender
+        ) revert OnlyExceptYourProperty();
 
         Complaint storage complaint = complaints[whoAbout];
 
@@ -294,23 +275,24 @@ contract Lease is Manager, Events {
 
     //MODIFIERS
     modifier onlyPropertyOwner(uint256 propertyIndex) {
-        require(
-            properties[propertyIndex].owner == msg.sender,
-            "Only property owner can perform this action"
-        );
+        if (properties[propertyIndex].owner != msg.sender)
+            revert OnlyPropertyOwner();
         _;
     }
 
     modifier onlyTenant(uint256 propertyIndex) {
-        require(
-            properties[propertyIndex].leaseInfo.tenantAddress == msg.sender,
-            "Only tenant can perform this action"
-        );
+        if (properties[propertyIndex].leaseInfo.tenantAddress != msg.sender)
+            revert OnlyTenant();
         _;
     }
 
     modifier onlyManager() {
-        require(isManager(msg.sender), "Only managers can perform this action");
+        if (!isManager(msg.sender)) revert OnlyManager();
+        _;
+    }
+
+    modifier validIndex(uint256 propertyIndex) {
+        ErrorHelper.checkIndex(propertyIndex, propertiesLength);
         _;
     }
 }
