@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npx hardhat test",
+    "test": "npx hardhat compile && npx hardhat test",
     "compile": "npx hardhat compile",
-    "localDeploy": "npx hardhat run --network localhost scripts/deploy.ts",
+    "localDeploy": "npx hardhat compile && npx hardhat run --network localhost scripts/deploy.ts",
     "localNode": "npx hardhat node"
   },
   "author": "",

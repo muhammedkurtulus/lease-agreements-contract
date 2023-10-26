@@ -15,6 +15,7 @@ enum ConfirmationType {
 struct Complaint {
     address complainant;
     address whoAbout;
+    uint256 complaintIndex;
     uint256 propertyIndex;
     string description;
     ConfirmationType confirmed;

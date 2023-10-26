@@ -6,14 +6,19 @@ import "./utils/Events.sol";
 import "./utils/Types.sol";
 import "./utils/Errors.sol";
 
+import "hardhat/console.sol";
+
 contract Lease is Manager, Events {
     uint256 public propertiesLength;
+    uint256 public complaintsLength;
+    Complaint[] public allComplaints;
 
     mapping(uint256 => PropertyInfo) public properties;
-    mapping(address => Complaint) public complaints;
+    mapping(address => mapping(uint256 => Complaint)) public complaints;
 
     constructor() {
         propertiesLength = 0;
+        complaintsLength = 0;
     }
 
     function addProperty(
@@ -28,10 +33,7 @@ contract Lease is Manager, Events {
         ErrorHelper.checkEmpty(ownerName);
         ErrorHelper.checkEmpty(propertyAddress);
 
-        Complaint memory complaint = complaints[msg.sender];
-
-        if (complaint.confirmed == ConfirmationType.confirm)
-            revert BannedFromThisAction();
+        if (isBanned(msg.sender)) revert BannedFromThisAction();
 
         PropertyInfo storage property = properties[propertiesLength];
         property.propertyIndex = propertiesLength;
@@ -58,35 +60,6 @@ contract Lease is Manager, Events {
     }
 
     function getAllComplaints() external view returns (Complaint[] memory) {
-        Complaint[] memory allComplaints = new Complaint[](
-            propertiesLength * 2
-        );
-        uint256 complaintCount = 0;
-
-        for (uint256 i = 0; i < propertiesLength; i++) {
-            address ownerAddress = properties[i].owner;
-            address tenantAddress = properties[i].leaseInfo.tenantAddress;
-
-            if (
-                complaints[ownerAddress].complainant == address(0) &&
-                complaints[tenantAddress].complainant == address(0)
-            ) continue;
-
-            if (complaints[tenantAddress].complainant != address(0)) {
-                allComplaints[complaintCount] = complaints[tenantAddress];
-                complaintCount++;
-            }
-
-            if (complaints[ownerAddress].complainant != address(0)) {
-                allComplaints[complaintCount] = complaints[ownerAddress];
-                complaintCount++;
-            }
-        }
-
-        assembly {
-            mstore(allComplaints, complaintCount)
-        }
-
         return allComplaints;
     }
 
@@ -120,10 +93,7 @@ contract Lease is Manager, Events {
 
         if (tenantAddress == msg.sender) revert OwnerCannotBeTenant();
 
-        Complaint memory complaint = complaints[msg.sender];
-
-        if (complaint.confirmed == ConfirmationType.confirm)
-            revert BannedFromThisAction();
+        if (isBanned(msg.sender)) revert BannedFromThisAction();
 
         PropertyInfo storage property = properties[propertyIndex];
 
@@ -204,22 +174,16 @@ contract Lease is Manager, Events {
             revert RequestNotExist();
 
         if (msg.sender == property.owner) {
-            Complaint memory complaint = complaints[
-                property.leaseInfo.tenantAddress
-            ];
-
             if (
                 property.leaseInfo.terminationRequester == msg.sender &&
-                complaint.confirmed != ConfirmationType.confirm
+                !isBanned(property.leaseInfo.tenantAddress)
             ) revert RequesterCannotConfirm();
         } else if (msg.sender == property.leaseInfo.tenantAddress) {
-            Complaint memory complaint = complaints[property.owner];
-
             if (
                 property.leaseInfo.terminationRequester == msg.sender &&
                 block.timestamp <
                 property.leaseInfo.terminationRequestTime + 15 days &&
-                complaint.confirmed != ConfirmationType.confirm
+                !isBanned(property.owner)
             ) revert NotPassed15Days();
         } else if (isManager(msg.sender)) {
             if (
@@ -254,31 +218,42 @@ contract Lease is Manager, Events {
 
     function submitComplaint(
         uint256 propertyIndex,
-        address whoAbout,
         string calldata description
     ) external validIndex(propertyIndex) {
-        ErrorHelper.checkAddress(whoAbout);
-        if (whoAbout == msg.sender) revert CannotComplainOwnself();
-
         PropertyInfo memory property = properties[propertyIndex];
 
+        if (property.leaseInfo.tenantAddress == address(0)) revert NoTenant();
+
         if (
-            properties[propertyIndex].owner != msg.sender &&
-            properties[propertyIndex].leaseInfo.tenantAddress != msg.sender &&
-            (whoAbout != property.owner &&
-                whoAbout != property.leaseInfo.tenantAddress)
+            property.owner != msg.sender &&
+            property.leaseInfo.tenantAddress != msg.sender
         ) revert OnlyTenantOrPropertyOwner();
 
-        Complaint storage complaint = complaints[whoAbout];
+        address whoAbout;
+
+        if (property.owner == msg.sender) {
+            whoAbout = property.leaseInfo.tenantAddress;
+        } else if (property.leaseInfo.tenantAddress == msg.sender) {
+            whoAbout = property.owner;
+        }
+
+        Complaint storage complaint = complaints[whoAbout][complaintsLength];
+
+        console.log("whoAbout: %s sender: %s", whoAbout, msg.sender);
 
         complaint.complainant = msg.sender;
         complaint.propertyIndex = propertyIndex;
         complaint.description = description;
         complaint.whoAbout = whoAbout;
+        complaint.complaintIndex = complaintsLength;
+
+        complaintsLength++;
+
+        allComplaints.push(complaint);
 
         emit ComplaintReported(
             msg.sender,
-            complaint.whoAbout,
+            whoAbout,
             propertyIndex,
             property.propertyAddress,
             description,
@@ -289,6 +264,7 @@ contract Lease is Manager, Events {
 
     function reviewComplaint(
         uint256 propertyIndex,
+        uint256 complaintIndex,
         address whoAbout,
         bool confirmation
     ) external validIndex(propertyIndex) onlyManager {
@@ -299,11 +275,22 @@ contract Lease is Manager, Events {
             property.leaseInfo.tenantAddress == msg.sender
         ) revert OnlyExceptYourProperty();
 
-        Complaint storage complaint = complaints[whoAbout];
+        Complaint storage complaint = complaints[whoAbout][complaintIndex];
 
         complaint.confirmed = confirmation
             ? ConfirmationType.confirm
             : ConfirmationType.reject;
+
+        allComplaints.push(complaint);
+    }
+
+    function isBanned(address _addr) internal view returns (bool) {
+        for (uint256 i = 0; i < complaintsLength; i++) {
+            Complaint memory complaint = complaints[_addr][i];
+            if (complaint.confirmed == ConfirmationType.confirm) return true;
+        }
+
+        return false;
     }
 
     //MODIFIERS

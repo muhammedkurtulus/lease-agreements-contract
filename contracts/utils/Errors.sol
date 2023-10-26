@@ -18,7 +18,6 @@ error SignPeriodExpired();
 error RequestNotExist();
 error RequesterCannotConfirm();
 error NotPassed15Days();
-error CannotComplainOwnself();
 error IsNotManager();
 error MustRemainOneManager();
 error OnlyExceptYourProperty();
@@ -30,6 +29,7 @@ error OnlyTenantOrPropertyOwner();
 error OnlyActiveLease();
 error PermissionDenied();
 error InvalidIndex();
+error NoTenant();
 
 library ErrorHelper {
     using StringHelper for string;
