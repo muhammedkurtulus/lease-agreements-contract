@@ -6,7 +6,8 @@
   "scripts": {
     "test": "npx hardhat test",
     "compile": "npx hardhat compile",
-    "localDeploy" : "npx hardhat run --network localhost scripts/deploy.ts"
+    "localDeploy": "npx hardhat run --network localhost scripts/deploy.ts",
+    "localNode": "npx hardhat node"
   },
   "author": "",
   "license": "ISC",
@@ -29,5 +30,8 @@
     "ts-node": "^10.9.1",
     "typechain": "^8.3.1",
     "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
   }
 }
