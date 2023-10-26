@@ -11,9 +11,7 @@ describe("LeaseContract", function () {
 
   it("Should add a new property", async function () {
     const { leaseContract, owner, addr1 } = await loadFixture(init);
-    await leaseContract
-      .connect(addr1)
-      .addProperty(propertyAddress, PropertyType.House, name1);
+    await leaseContract.connect(addr1).addProperty(propertyAddress, PropertyType.House, name1);
     await leaseContract.addProperty(propertyAddress, PropertyType.Shop, name2);
     const properties = await leaseContract.getAllProperties();
 
@@ -52,39 +50,33 @@ describe("LeaseContract", function () {
     expect(property.leaseInfo.tenantName).to.equal(name2);
     expect(property.leaseInfo.duration).to.equal(2);
     expect(property.leaseInfo.isActive).to.equal(false);
-    expect(property.leaseInfo.endDate - property.leaseInfo.startDate).to.equal(
-      3 * day
-    );
+    expect(property.leaseInfo.endDate - property.leaseInfo.startDate).to.equal(3 * day);
 
     await leaseContract.connect(addr1).signLease(0);
 
     const signedPropertyLease = await leaseContract.properties(0);
 
-    expect(
-      signedPropertyLease.leaseInfo.endDate - property.leaseInfo.startDate
-    ).to.be.closeTo(2 * year, 1);
+    expect(signedPropertyLease.leaseInfo.endDate - property.leaseInfo.startDate).to.be.closeTo(
+      2 * year,
+      1
+    );
     expect(signedPropertyLease.leaseInfo.isActive).to.equal(true);
   });
 
   it("Should request termination by owner and confirm by manager", async function () {
     const { leaseContract, owner, addr1, addr2 } = await loadFixture(init);
-    await leaseContract
-      .connect(addr1)
-      .addProperty(propertyAddress, PropertyType.House, name1);
+    await leaseContract.connect(addr1).addProperty(propertyAddress, PropertyType.House, name1);
 
-    await leaseContract
-      .connect(addr1)
-      .startLease(0, addr2.address, "Tenant Name", 2);
+    await leaseContract.connect(addr1).startLease(0, addr2.address, "Tenant Name", 2);
 
     await leaseContract.connect(addr2).signLease(0);
 
-    await leaseContract
-      .connect(addr1)
-      .requestTermination(0, ownerTerminateReason);
+    await leaseContract.connect(addr1).requestTermination(0, ownerTerminateReason);
 
-    await expect(
-      leaseContract.confirmTermination(0)
-    ).to.be.revertedWithCustomError(leaseContract, "NotPassed15Days");
+    await expect(leaseContract.confirmTermination(0)).to.be.revertedWithCustomError(
+      leaseContract,
+      "NotPassed15Days"
+    );
 
     // const property = await leaseContract.properties(0);
 
@@ -94,25 +86,50 @@ describe("LeaseContract", function () {
 
   it("Should submit a complaint and confirm", async function () {
     const { leaseContract, owner, addr1, addr2 } = await loadFixture(init);
-    await leaseContract
-      .connect(addr1)
-      .addProperty(propertyAddress, PropertyType.House, name1);
+    await leaseContract.connect(addr1).addProperty(propertyAddress, PropertyType.House, name1);
 
-    await leaseContract
-      .connect(addr1)
-      .startLease(0, addr2.address, "Tenant Name", 2);
+    await leaseContract.connect(addr1).startLease(0, addr2.address, "Tenant Name", 2);
 
     await leaseContract.connect(addr2).signLease(0);
 
-    await leaseContract
-      .connect(addr1)
-      .submitComplaint(0, addr2.address, ownerComplaintDescription);
+    await leaseContract.connect(addr1).submitComplaint(0, addr2.address, ownerComplaintDescription);
 
     await leaseContract.reviewComplaint(0, addr2.address, true);
 
     const complaint = await leaseContract.complaints(addr2.address);
 
     expect(complaint.confirmed).to.equal(ConfirmationType.confirm);
+  });
+
+  it("Should get all complaints", async function () {
+    const { leaseContract, owner, addr1, addr2, addr3 } = await loadFixture(init);
+    await leaseContract.connect(addr1).addProperty(propertyAddress, PropertyType.House, name1);
+
+    await leaseContract.connect(addr1).startLease(0, addr2.address, "Tenant Name", 2);
+
+    await leaseContract.connect(addr2).signLease(0);
+
+    await leaseContract.connect(addr1).submitComplaint(0, addr2.address, ownerComplaintDescription);
+
+    await leaseContract
+      .connect(addr2)
+      .submitComplaint(0, addr1.address, tenantComplaintDescription);
+
+    const complaints = await leaseContract.getAllComplaints();
+
+    expect(complaints).to.have.lengthOf(2);
+
+    expect(complaints[0].complainant).to.equal(addr1.address);
+    expect(complaints[0].whoAbout).to.equal(addr2.address);
+    expect(complaints[0].propertyIndex).to.equal(0);
+    expect(complaints[0].description).to.equal(ownerComplaintDescription);
+    expect(complaints[0].confirmed).to.equal(ConfirmationType.none);
+
+    expect(complaints[1].complainant).to.equal(addr2.address);
+    expect(complaints[1].whoAbout).to.equal(addr1.address);
+    expect(complaints[1].propertyIndex).to.equal(0);
+    expect(complaints[1].description).to.equal(tenantComplaintDescription);
+    expect(complaints[1].confirmed).to.equal(ConfirmationType.none);
   });
 });
 

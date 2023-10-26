@@ -57,6 +57,39 @@ contract Lease is Manager, Events {
         return _properties;
     }
 
+    function getAllComplaints() external view returns (Complaint[] memory) {
+        Complaint[] memory allComplaints = new Complaint[](
+            propertiesLength * 2
+        );
+        uint256 complaintCount = 0;
+
+        for (uint256 i = 0; i < propertiesLength; i++) {
+            address ownerAddress = properties[i].owner;
+            address tenantAddress = properties[i].leaseInfo.tenantAddress;
+
+            if (
+                complaints[ownerAddress].complainant == address(0) &&
+                complaints[tenantAddress].complainant == address(0)
+            ) continue;
+
+            if (complaints[tenantAddress].complainant != address(0)) {
+                allComplaints[complaintCount] = complaints[tenantAddress];
+                complaintCount++;
+            }
+
+            if (complaints[ownerAddress].complainant != address(0)) {
+                allComplaints[complaintCount] = complaints[ownerAddress];
+                complaintCount++;
+            }
+        }
+
+        assembly {
+            mstore(allComplaints, complaintCount)
+        }
+
+        return allComplaints;
+    }
+
     function unlistProperty(
         uint256 propertyIndex
     ) external validIndex(propertyIndex) onlyPropertyOwner(propertyIndex) {
