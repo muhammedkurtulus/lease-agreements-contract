@@ -86,16 +86,16 @@ contract Lease is Manager, Events {
         address tenantAddress,
         string calldata tenantName,
         uint256 duration
-    ) external validIndex(propertyIndex) onlyPropertyOwner(propertyIndex) {
+    ) external validIndex(propertyIndex) {
         ErrorHelper.checkZero(duration);
         ErrorHelper.checkEmpty(tenantName);
         ErrorHelper.checkAddress(tenantAddress);
 
-        if (tenantAddress == msg.sender) revert OwnerCannotBeTenant();
-
         if (isBanned(msg.sender)) revert BannedFromThisAction();
 
         PropertyInfo storage property = properties[propertyIndex];
+
+        if (property.owner == tenantAddress) revert OwnerCannotBeTenant();
 
         if (properties[propertyIndex].leaseInfo.tenantAddress != address(0))
             revert AlreadyAdded();
@@ -104,15 +104,18 @@ contract Lease is Manager, Events {
         property.leaseInfo.tenantName = tenantName;
         property.leaseInfo.duration = duration;
         property.leaseInfo.startDate = block.timestamp;
-        property.leaseInfo.endDate = property.leaseInfo.startDate + 3 days; // 3 days for tenant to sign
+        property.leaseInfo.endDate = property.leaseInfo.startDate + 3 days; // 3 days for sign
     }
 
     function signLease(
         uint256 propertyIndex
-    ) external validIndex(propertyIndex) onlyTenant(propertyIndex) {
+    ) external validIndex(propertyIndex) {
         PropertyInfo storage property = properties[propertyIndex];
 
-        if (property.leaseInfo.tenantAddress != msg.sender) revert OnlyTenant();
+        if (
+            property.leaseInfo.tenantAddress != msg.sender &&
+            property.owner != msg.sender
+        ) revert OnlyTenantOrPropertyOwner();
 
         if (property.leaseInfo.isActive) revert AlreadyActive();
 
@@ -225,8 +228,8 @@ contract Lease is Manager, Events {
         if (property.leaseInfo.tenantAddress == address(0)) revert NoTenant();
 
         if (
-            property.owner != msg.sender &&
-            property.leaseInfo.tenantAddress != msg.sender
+            property.leaseInfo.tenantAddress != msg.sender &&
+            property.owner != msg.sender
         ) revert OnlyTenantOrPropertyOwner();
 
         address whoAbout;
@@ -239,7 +242,7 @@ contract Lease is Manager, Events {
 
         Complaint storage complaint = complaints[whoAbout][complaintsLength];
 
-        console.log("whoAbout: %s sender: %s", whoAbout, msg.sender);
+        console.log("whoAbout: %s\nsender: %s", whoAbout, msg.sender);
 
         complaint.complainant = msg.sender;
         complaint.propertyIndex = propertyIndex;

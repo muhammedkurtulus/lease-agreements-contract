@@ -40,7 +40,7 @@ describe("LeaseContract", function () {
     expect(properties[0].isListed).to.equal(false);
   });
 
-  it("Should start a lease and sign", async function () {
+  it("Should Owner start a lease and tenant sign", async function () {
     const { leaseContract, owner, addr1 } = await loadFixture(init);
     await leaseContract.addProperty(propertyAddress, PropertyType.House, name1);
 
@@ -57,6 +57,32 @@ describe("LeaseContract", function () {
     );
 
     await leaseContract.connect(addr1).signLease(0);
+
+    const signedPropertyLease = await leaseContract.properties(0);
+
+    expect(
+      signedPropertyLease.leaseInfo.endDate - property.leaseInfo.startDate
+    ).to.be.closeTo(2 * year, 1);
+    expect(signedPropertyLease.leaseInfo.isActive).to.equal(true);
+  });
+
+  it("Should Tenant start a lease and owner sign", async function () {
+    const { leaseContract, owner, addr1 } = await loadFixture(init);
+    await leaseContract.addProperty(propertyAddress, PropertyType.House, name1);
+
+    await leaseContract.connect(addr1).startLease(0, addr1.address, name2, 2);
+
+    const property = await leaseContract.properties(0);
+
+    expect(property.leaseInfo.tenantAddress).to.equal(addr1.address);
+    expect(property.leaseInfo.tenantName).to.equal(name2);
+    expect(property.leaseInfo.duration).to.equal(2);
+    expect(property.leaseInfo.isActive).to.equal(false);
+    expect(property.leaseInfo.endDate - property.leaseInfo.startDate).to.equal(
+      3 * day
+    );
+
+    await leaseContract.connect(owner).signLease(0);
 
     const signedPropertyLease = await leaseContract.properties(0);
 
@@ -149,8 +175,6 @@ describe("LeaseContract", function () {
       .connect(addr2)
       .submitComplaint(0, tenantComplaintDescription);
 
-    console.log(addr1.address, addr2.address, addr3.address);
-
     expect(
       (await leaseContract.complaints(addr2.address, 0)).complainant
     ).to.equal(addr1.address);
@@ -160,11 +184,7 @@ describe("LeaseContract", function () {
 
     const complaints = await leaseContract.getAllComplaints();
 
-    console.log("complaints", complaints);
-
     // expect(complaints).to.have.lengthOf(3);
-
-    console.log(await leaseContract.complaintsLength());
 
     expect(complaints[0].complainant).to.equal(addr1.address);
     expect(complaints[0].whoAbout).to.equal(addr2.address);
