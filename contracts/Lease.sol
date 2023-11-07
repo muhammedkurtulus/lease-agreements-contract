@@ -81,6 +81,15 @@ contract Lease is Manager, Events {
         property.leaseInfo.endDate = 0;
     }
 
+    function listProperty(
+        uint256 propertyIndex
+    ) external validIndex(propertyIndex) onlyPropertyOwner(propertyIndex) {
+        if (properties[propertyIndex].isListed == true) revert AlreadyListed();
+
+        PropertyInfo storage property = properties[propertyIndex];
+        property.isListed = true;
+    }
+
     function startLease(
         uint256 propertyIndex,
         address tenantAddress,
@@ -101,6 +110,7 @@ contract Lease is Manager, Events {
             revert AlreadyAdded();
 
         property.leaseInfo.tenantAddress = tenantAddress;
+        property.leaseInfo.initiatorAddress = msg.sender;
         property.leaseInfo.tenantName = tenantName;
         property.leaseInfo.duration = duration;
         property.leaseInfo.startDate = block.timestamp;
@@ -118,6 +128,9 @@ contract Lease is Manager, Events {
         ) revert OnlyTenantOrPropertyOwner();
 
         if (property.leaseInfo.isActive) revert AlreadyActive();
+
+        if (property.leaseInfo.initiatorAddress == msg.sender)
+            revert NoInitiator();
 
         if (block.timestamp > property.leaseInfo.endDate)
             revert SignPeriodExpired();

@@ -33,6 +33,7 @@ struct PropertyInfo {
 
 struct LeaseInfo {
     address tenantAddress;
+    address initiatorAddress;
     string tenantName;
     uint256 startDate;
     uint256 endDate;

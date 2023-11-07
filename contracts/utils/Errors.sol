@@ -30,6 +30,8 @@ error OnlyActiveLease();
 error PermissionDenied();
 error InvalidIndex();
 error NoTenant();
+error AlreadyListed();
+error NoInitiator();
 
 library ErrorHelper {
     using StringHelper for string;

@@ -40,6 +40,17 @@ describe("LeaseContract", function () {
     expect(properties[0].isListed).to.equal(false);
   });
 
+  it("Should list a property", async function () {
+    const { leaseContract, owner, addr1 } = await loadFixture(init);
+    await leaseContract.addProperty(propertyAddress, PropertyType.House, name1);
+    await leaseContract.unlistProperty(0);
+    await leaseContract.listProperty(0);
+    const properties = await leaseContract.getAllProperties();
+
+    expect(properties).to.have.lengthOf(1);
+    expect(properties[0].isListed).to.equal(true);
+  });
+
   it("Should Owner start a lease and tenant sign", async function () {
     const { leaseContract, owner, addr1 } = await loadFixture(init);
     await leaseContract.addProperty(propertyAddress, PropertyType.House, name1);
