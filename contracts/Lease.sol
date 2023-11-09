@@ -230,6 +230,9 @@ contract Lease is Manager, Events {
         property.leaseInfo.isActive = false;
         property.leaseInfo.terminationRequester = address(0);
         property.leaseInfo.terminationReason = "";
+        property.leaseInfo.terminationRequestTime = 0;
+        property.leaseInfo.initiatorAddress = address(0);
+        property.leaseInfo.duration = 0;
     }
 
     function submitComplaint(
@@ -296,6 +299,8 @@ contract Lease is Manager, Events {
         complaint.confirmed = confirmation
             ? ConfirmationType.confirm
             : ConfirmationType.reject;
+
+        complaint.reviewer = msg.sender;
 
         allComplaints.push(complaint);
     }
