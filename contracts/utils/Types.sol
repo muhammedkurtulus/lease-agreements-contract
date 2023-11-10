@@ -6,7 +6,7 @@ enum PropertyType {
     Shop
 }
 
-enum ConfirmationType {
+enum Status {
     none,
     confirm,
     reject
@@ -19,7 +19,7 @@ struct Complaint {
     uint256 complaintIndex;
     uint256 propertyIndex;
     string description;
-    ConfirmationType confirmed;
+    Status status;
 }
 
 struct PropertyInfo {

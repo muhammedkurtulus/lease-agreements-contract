@@ -32,6 +32,7 @@ error InvalidIndex();
 error NoTenant();
 error AlreadyListed();
 error NoInitiator();
+error AlreadyConcluded();
 
 library ErrorHelper {
     using StringHelper for string;

@@ -37,12 +37,14 @@ contract Events {
         address propertyOwner
     );
 
-    event TerminationRequested(
-        address indexed requesterAddress,
+    event ComplaintConcluded(
+        address indexed complainant,
+        address indexed whoAbout,
         uint256 propertyIndex,
         string propertyAddress,
-        string ownerName,
-        string tenantName,
-        string reason
+        string description,
+        address tenantAddress,
+        address propertyOwner,
+        string conclusion
     );
 }

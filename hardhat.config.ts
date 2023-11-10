@@ -6,6 +6,7 @@ dotenv.config();
 
 const config: HardhatUserConfig = {
   solidity: "0.8.19",
+  defaultNetwork: "localhost",
   networks: {
     hardhat: {
       chainId: 1337,
@@ -15,6 +16,13 @@ const config: HardhatUserConfig = {
         path: "m/44'/60'/0'/0",
       },
     },
+    mumbai: {
+      url: process.env.API_URL,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+  },
+  etherscan: {
+    apiKey: process.env.POLYGON_SCAN_API_KEY,
   },
 };
 

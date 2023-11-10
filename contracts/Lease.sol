@@ -170,15 +170,6 @@ contract Lease is Manager, Events {
         property.leaseInfo.terminationRequester = msg.sender;
         property.leaseInfo.terminationReason = reason;
         property.leaseInfo.terminationRequestTime = block.timestamp;
-
-        emit TerminationRequested(
-            msg.sender,
-            propertyIndex,
-            property.propertyAddress,
-            property.ownerName,
-            property.leaseInfo.tenantName,
-            reason
-        );
     }
 
     function confirmTermination(
@@ -210,6 +201,17 @@ contract Lease is Manager, Events {
             revert PermissionDenied();
         }
 
+        property.leaseInfo.tenantAddress = address(0);
+        property.leaseInfo.tenantName = "";
+        property.leaseInfo.startDate = 0;
+        property.leaseInfo.endDate = 0;
+        property.leaseInfo.isActive = false;
+        property.leaseInfo.terminationRequester = address(0);
+        property.leaseInfo.terminationReason = "";
+        property.leaseInfo.terminationRequestTime = 0;
+        property.leaseInfo.initiatorAddress = address(0);
+        property.leaseInfo.duration = 0;
+
         emit LeaseEnded(
             property.leaseInfo.tenantAddress,
             property.owner,
@@ -222,23 +224,14 @@ contract Lease is Manager, Events {
             property.leaseInfo.tenantName,
             property.leaseInfo.terminationReason
         );
-
-        property.leaseInfo.tenantAddress = address(0);
-        property.leaseInfo.tenantName = "";
-        property.leaseInfo.startDate = 0;
-        property.leaseInfo.endDate = 0;
-        property.leaseInfo.isActive = false;
-        property.leaseInfo.terminationRequester = address(0);
-        property.leaseInfo.terminationReason = "";
-        property.leaseInfo.terminationRequestTime = 0;
-        property.leaseInfo.initiatorAddress = address(0);
-        property.leaseInfo.duration = 0;
     }
 
     function submitComplaint(
         uint256 propertyIndex,
         string calldata description
     ) external validIndex(propertyIndex) {
+        ErrorHelper.checkEmpty(description);
+
         PropertyInfo memory property = properties[propertyIndex];
 
         if (property.leaseInfo.tenantAddress == address(0)) revert NoTenant();
@@ -286,7 +279,12 @@ contract Lease is Manager, Events {
         uint256 complaintIndex,
         address whoAbout,
         bool confirmation
-    ) external validIndex(propertyIndex) onlyManager {
+    )
+        external
+        validIndex(propertyIndex)
+        validIndex(complaintIndex)
+        onlyManager
+    {
         PropertyInfo memory property = properties[propertyIndex];
 
         if (
@@ -296,19 +294,39 @@ contract Lease is Manager, Events {
 
         Complaint storage complaint = complaints[whoAbout][complaintIndex];
 
-        complaint.confirmed = confirmation
-            ? ConfirmationType.confirm
-            : ConfirmationType.reject;
+        if (complaint.status != Status.none) revert AlreadyConcluded();
+
+        complaint.status = confirmation ? Status.confirm : Status.reject;
 
         complaint.reviewer = msg.sender;
 
-        allComplaints.push(complaint);
+        for (uint256 i = 0; i < allComplaints.length; i++) {
+            if (
+                allComplaints[i].whoAbout == whoAbout &&
+                allComplaints[i].complaintIndex == complaintIndex
+            ) {
+                allComplaints[i].reviewer = msg.sender;
+                allComplaints[i].status = complaint.status;
+                break;
+            }
+        }
+
+        emit ComplaintConcluded(
+            complaint.complainant,
+            whoAbout,
+            propertyIndex,
+            property.propertyAddress,
+            complaint.description,
+            property.leaseInfo.tenantAddress,
+            property.owner,
+            confirmation ? "Confirmed" : "Rejected"
+        );
     }
 
     function isBanned(address _addr) internal view returns (bool) {
         for (uint256 i = 0; i < complaintsLength; i++) {
             Complaint memory complaint = complaints[_addr][i];
-            if (complaint.confirmed == ConfirmationType.confirm) return true;
+            if (complaint.status == Status.confirm) return true;
         }
 
         return false;
@@ -332,8 +350,8 @@ contract Lease is Manager, Events {
         _;
     }
 
-    modifier validIndex(uint256 propertyIndex) {
-        ErrorHelper.checkIndex(propertyIndex, propertiesLength);
+    modifier validIndex(uint256 index) {
+        ErrorHelper.checkIndex(index, propertiesLength);
         _;
     }
 }
